@@ -9,9 +9,9 @@ Built with **n8n + Claude Haiku + Gmail OAuth + Python**.
 ## How It Works
 ```mermaid
 flowchart TD
-    A[⏰ Schedule Trigger\nEvery 2 Hours] --> B[📬 Gmail\nFetch last 2hrs of emails]
-    B --> C[📋 Extract Fields\nSubject · From · Body · Date]
-    C --> D[🤖 Claude Haiku\nClassify email]
+    A[⏰ Schedule Trigger \n Every 2 Hours] --> B[📬 Gmail \n Fetch last 2hrs of emails]
+    B --> C[📋 Extract Fields \n Subject · From · Body · Date]
+    C --> D[🤖 Claude Haiku \n Classify email]
     D --> E{Real job\nresponse?}
     E -- ❌ No --> F[🗑️ Ignore\nSpam · Alerts · Random]
     E -- ✅ Yes --> G[📦 Store Job Data\nCompany · Role · Status · Notes]
