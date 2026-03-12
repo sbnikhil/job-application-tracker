@@ -7,15 +7,27 @@ Built with **n8n + Claude Haiku + Gmail OAuth + Python**.
 ---
 
 ## How It Works
+```mermaid
+flowchart TD
+    A[⏰ Schedule Trigger\nEvery 2 Hours] --> B[📬 Gmail\nFetch last 2hrs of emails]
+    B --> C[📋 Extract Fields\nSubject · From · Body · Date]
+    C --> D[🤖 Claude Haiku\nClassify email]
+    D --> E{Real job\nresponse?}
+    E -- ❌ No --> F[🗑️ Ignore\nSpam · Alerts · Random]
+    E -- ✅ Yes --> G[📦 Store Job Data\nCompany · Role · Status · Notes]
+    G --> H[📖 Read Excel\nLoad current tracker]
+    H --> I{Row exists\nfor this job?}
+    I -- Yes --> J[🔄 Update Status\nApplied → Interview etc.]
+    I -- No --> K[➕ Add New Row]
+    J --> L[💾 Save to Excel\nColors + Dropdown preserved]
+    K --> L
 
-```
-Gmail (every 2hrs) → Claude AI filters → Real job email?
-        ↓ Yes                                    ↓ No
-Extract company/role/status              Ignored silently
-        ↓
-Read Excel → Update existing row OR add new row
-        ↓
-Save back to Excel with colors + dropdown preserved
+    style A fill:#4A90D9,color:#fff
+    style D fill:#7B68EE,color:#fff
+    style E fill:#F5A623,color:#fff
+    style F fill:#D0D0D0,color:#333
+    style L fill:#27AE60,color:#fff
+    style I fill:#F5A623,color:#fff
 ```
 
 **Status lifecycle tracked automatically:**
@@ -53,7 +65,7 @@ Before you start, make sure you have:
 
 - [ ] **Mac or Linux** (Windows works too but paths will differ)
 - [ ] **Docker** installed — [get it here](https://www.docker.com/products/docker-desktop)
-- [ ] **Python 3** installed — comes with Mac by default
+- [ ] **Python 3** installed 
 - [ ] **Anthropic API key** — [get one here](https://console.anthropic.com)
 - [ ] **Gmail account** you use for job applications
 - [ ] **Microsoft Excel** or Numbers to view the tracker
@@ -118,47 +130,7 @@ EOF
 
 ### Step 3 — Create the Python Update Script
 
-This script writes data back to Excel while preserving formatting and dropdowns:
-
-```bash
-cat > ~/Desktop/JobRadar/update_tracker.py << 'EOF'
-import sys, json, openpyxl, os
-from openpyxl.styles import PatternFill
-from openpyxl.worksheet.datavalidation import DataValidation
-
-path = os.path.expanduser('~/Desktop/JobRadar/job-tracker.xlsx')
-rows = json.loads(sys.argv[1])
-
-wb = openpyxl.load_workbook(path)
-ws = wb['Applications']
-
-fills = {
-    'Applied':    PatternFill("solid", fgColor="D9EAF7"),
-    'Assessment': PatternFill("solid", fgColor="FFF3CD"),
-    'Interview':  PatternFill("solid", fgColor="D4EDDA"),
-    'Rejected':   PatternFill("solid", fgColor="F8D7DA"),
-    'Offer':      PatternFill("solid", fgColor="C3E6CB"),
-}
-
-for row in ws.iter_rows(min_row=2):
-    for cell in row:
-        cell.value = None
-        cell.fill = PatternFill()
-
-headers = ['Company','Role','Status','Date Applied','Last Updated','Sender','Notes']
-for i, row in enumerate(rows, start=2):
-    for j, key in enumerate(headers, start=1):
-        cell = ws.cell(row=i, column=j, value=row.get(key, ''))
-        if row.get('Status') in fills:
-            ws.cell(row=i, column=j).fill = fills[row.get('Status')]
-
-dv = DataValidation(type="list", formula1='"Applied,Assessment,Interview,Rejected,Offer"', allow_blank=True, showDropDown=False)
-dv.sqref = "C2:C1000"
-ws.add_data_validation(dv)
-wb.save(path)
-print("saved")
-EOF
-```
+Check update_tracker.py (This script writes data back to Excel while preserving formatting and dropdowns)
 
 ---
 
@@ -188,7 +160,7 @@ Open **http://localhost:5678** in your browser and create an account.
 
 You need to create a Google OAuth app to let n8n read your Gmail:
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com) → create a new project called `JobRadar`
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) → create a new project
 2. Search for **"Gmail API"** → click **Enable**
 3. Go to **APIs & Services** → **OAuth consent screen** → External → fill in app name + email
 4. Add yourself as a **Test User**
@@ -259,15 +231,6 @@ Click **Publish** (top right) — the bot is now live and will run every 2 hours
 
 ---
 
-## Cost Estimate
-
-Using Claude Haiku (cheapest model):
-- ~$0.001 per email classified
-- If you get 20 job-related emails per week → ~$0.02/week
-- Monthly cost: **< $0.10**
-
----
-
 ## Troubleshooting
 
 **Workflow runs but nothing gets added to Excel**
@@ -298,7 +261,7 @@ Using Claude Haiku (cheapest model):
 
 ## License
 
-MIT — use it, fork it, improve it.
+MIT 
 
 ---
 
