@@ -1,0 +1,237 @@
+{
+  "name": "JobRadar - Gmail to Excel Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyHour" }]
+        },
+        "filters": {}
+      },
+      "id": "a1b2c3d4-0001",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "subject",
+              "value": "={{ $json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "body",
+              "value": "={{ ($json.text || $json.snippet || '').slice(0, 1500) }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "from",
+              "value": "={{ $json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "date",
+              "value": "={{ $json.date }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002",
+      "name": "Extract Email Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$credentials.httpHeaderAuth.value}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a job application email classifier. Analyze the email and return ONLY valid JSON with no markdown fences or explanation.\\n\\nReturn exactly:\\n{\\n  \\\"isJobResponse\\\": true/false,\\n  \\\"company\\\": \\\"Company Name or null\\\",\\n  \\\"role\\\": \\\"Job Title or null\\\",\\n  \\\"status\\\": \\\"Applied|Assessment|Interview|Rejected|Offer|Other\\\",\\n  \\\"notes\\\": \\\"brief one-line summary\\\"\\n}\\n\\nRules:\\n- isJobResponse = true ONLY if this email is from a real company/recruiter about a specific job the user applied to.\\n- Job alert blasts, newsletters, LinkedIn job digests = false.\\n- Confirmation emails (your application was received) = true, status = Applied.\\n- Rejection = Rejected. Interview invite = Interview. Task/assignment = Assessment.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"=From: {{ $json.from }}\\nSubject: {{ $json.subject }}\\nBody: {{ $json.body }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003",
+      "name": "AI Classify Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [640, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openai-cred-id",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.choices[0].message.content.trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch(e) {\n  parsed = { isJobResponse: false, notes: 'Parse error: ' + raw.slice(0, 100) };\n}\n\n// Carry email metadata forward\nconst emailFields = $('Extract Email Fields').item.json;\nreturn [{\n  json: {\n    isJobResponse: parsed.isJobResponse || false,\n    company: parsed.company || null,\n    role: parsed.role || null,\n    status: parsed.status || 'Applied',\n    notes: parsed.notes || '',\n    from: emailFields.from,\n    subject: emailFields.subject,\n    emailDate: emailFields.date\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0004",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.isJobResponse }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005",
+      "name": "Is Job Response?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store job data from AI before reading file\nconst jobData = $('Parse AI Response').item.json;\nreturn [{ json: { jobData } }];"
+      },
+      "id": "a1b2c3d4-0006",
+      "name": "Store Job Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/data/job-tracker.xlsx"
+      },
+      "id": "a1b2c3d4-0007",
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1520, 200]
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008",
+      "name": "Parse Excel Rows",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [1740, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all existing rows\nconst allItems = $input.all();\nlet rows = allItems.map(item => item.json).filter(r => r['Company']);\n\n// Get job data stored earlier\nconst jobData = $('Store Job Data').item.json.jobData;\nconst today = new Date().toISOString().split('T')[0];\n\nconst companyLower = (jobData.company || '').toLowerCase().trim();\nconst roleLower = (jobData.role || '').toLowerCase().trim();\n\n// Try to find existing row (match by company + role)\nconst existingIdx = rows.findIndex(r =>\n  (r['Company'] || '').toLowerCase().trim() === companyLower &&\n  (r['Role'] || '').toLowerCase().trim() === roleLower\n);\n\nif (existingIdx >= 0) {\n  // Update status of existing row\n  rows[existingIdx]['Status'] = jobData.status;\n  rows[existingIdx]['Last Updated'] = today;\n  rows[existingIdx]['Notes'] = jobData.notes;\n} else {\n  // Add new row\n  rows.push({\n    'Company': jobData.company || 'Unknown',\n    'Role': jobData.role || 'Unknown',\n    'Status': jobData.status || 'Applied',\n    'Date Applied': today,\n    'Last Updated': today,\n    'Sender': jobData.from || '',\n    'Notes': jobData.notes || ''\n  });\n}\n\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "a1b2c3d4-0009",
+      "name": "Update or Add Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 200]
+    },
+    {
+      "parameters": {
+        "operation": "toFile",
+        "fileFormat": "xlsx",
+        "options": {
+          "sheetName": "Applications"
+        }
+      },
+      "id": "a1b2c3d4-0010",
+      "name": "Convert to Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [2180, 200]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/data/job-tracker.xlsx",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0011",
+      "name": "Save Excel File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [2400, 200]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [[{ "node": "Extract Email Fields", "type": "main", "index": 0 }]]
+    },
+    "Extract Email Fields": {
+      "main": [[{ "node": "AI Classify Email", "type": "main", "index": 0 }]]
+    },
+    "AI Classify Email": {
+      "main": [[{ "node": "Parse AI Response", "type": "main", "index": 0 }]]
+    },
+    "Parse AI Response": {
+      "main": [[{ "node": "Is Job Response?", "type": "main", "index": 0 }]]
+    },
+    "Is Job Response?": {
+      "main": [
+        [{ "node": "Store Job Data", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Store Job Data": {
+      "main": [[{ "node": "Read Excel File", "type": "main", "index": 0 }]]
+    },
+    "Read Excel File": {
+      "main": [[{ "node": "Parse Excel Rows", "type": "main", "index": 0 }]]
+    },
+    "Parse Excel Rows": {
+      "main": [[{ "node": "Update or Add Row", "type": "main", "index": 0 }]]
+    },
+    "Update or Add Row": {
+      "main": [[{ "node": "Convert to Excel", "type": "main", "index": 0 }]]
+    },
+    "Convert to Excel": {
+      "main": [[{ "node": "Save Excel File", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["job-search", "gmail", "excel", "ai"]
+}
