@@ -262,7 +262,3 @@ Click **Publish** (top right) — the bot is now live and will run every 2 hours
 ## License
 
 MIT 
-
----
-
-*Built in one session with zero prior n8n experience. You can do it too.*
